@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MessageBoard dApp</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Tailwind CSS CDN (ok for dev/testing) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Ethers.js UMD version -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-6">
+
+  <h1 class="text-3xl font-bold mb-6">MessageBoard dApp</h1>
+
+  <div class="bg-white shadow rounded-lg p-6 mb-4 w-full max-w-md">
+    <p class="font-semibold">Wallet: <span id="walletAddress">Not connected</span></p>
+    <button id="connectButton" class="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Connect MetaMask</button>
+  </div>
+
+  <div class="bg-white shadow rounded-lg p-6 mb-4 w-full max-w-md">
+    <p class="font-semibold mb-2">Set Message (writes a transaction)</p>
+    <input id="messageInput" type="text" placeholder="Type new message..." class="w-full border border-gray-300 rounded px-3 py-2 mb-2">
+    <button id="setButton" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Set Message</button>
+  </div>
+
+  <div class="bg-white shadow rounded-lg p-6 mb-4 w-full max-w-md">
+    <p class="font-semibold mb-2">Get Message (read-only)</p>
+    <button id="getButton" class="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 mb-2">Get Current Message</button>
+    <p>Current: <span id="currentMessage">—</span></p>
+  </div>
+
+  <div class="bg-white shadow rounded-lg p-6 w-full max-w-md">
+    <p class="font-semibold">Status</p>
+    <div id="status" class="mt-2 text-gray-700">Idle</div>
+  </div>
+
+  <script>
+    const contractAddress = "0xD008F88ecB1735430d2d6B0D97C230AE9f372a27";
+
+    const abi = [
+      { "inputs": [{"internalType":"string","name":"_initial","type":"string"}], "stateMutability":"nonpayable","type":"constructor" },
+      { "anonymous": false, "inputs":[{"indexed":true,"internalType":"address","name":"updater","type":"address"},{"indexed":false,"internalType":"string","name":"newMessage","type":"string"}], "name":"MessageUpdated","type":"event" },
+      { "inputs":[{"internalType":"string","name":"_message","type":"string"}], "name":"setMessage","outputs":[],"stateMutability":"nonpayable","type":"function" },
+      { "inputs":[],"name":"getMessage","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function" }
+    ];
+
+    let provider, signer, contract;
+    const statusEl = document.getElementById('status');
+    const walletEl = document.getElementById('walletAddress');
+    const currentMessageEl = document.getElementById('currentMessage');
+
+    function setStatus(msg) { statusEl.innerText = msg; }
+
+    async function connectWallet() {
+      if (!window.ethereum) return alert('MetaMask not found!');
+      try {
+        provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+        await provider.send("eth_requestAccounts", []);
+        signer = provider.getSigner();
+        const addr = await signer.getAddress();
+        walletEl.innerText = addr;
+        setStatus("Wallet connected");
+        contract = new ethers.Contract(contractAddress, abi, signer);
+      } catch (err) {
+        console.error(err);
+        setStatus("Error connecting wallet: " + (err.message || err));
+      }
+    }
+
+    async function setMessage() {
+      const input = document.getElementById('messageInput').value.trim();
+      if (!input) return alert("Enter a message");
+      if (!contract) return alert("Connect wallet first");
+      try {
+        setStatus("Sending transaction...");
+        const tx = await contract.setMessage(input);
+        setStatus("Transaction sent. Hash: " + tx.hash + " — waiting for confirmation...");
+        await tx.wait();
+        setStatus("Transaction confirmed: " + tx.hash);
+      } catch (err) {
+        console.error(err);
+        setStatus("Error: " + (err.message || err));
+      }
+    }
+
+    async function getMessage() {
+      try {
+        if (!provider) {
+          if (!window.ethereum) return alert("MetaMask required");
+          provider = new ethers.providers.Web3Provider(window.ethereum);
+        }
+        const readContract = new ethers.Contract(contractAddress, abi, provider);
+        setStatus("Reading message...");
+        const message = await readContract.getMessage();
+        currentMessageEl.innerText = message;
+        setStatus("Read successful");
+      } catch (err) {
+        console.error(err);
+        setStatus("Error reading: " + (err.message || err));
+      }
+    }
+
+    document.getElementById('connectButton').addEventListener('click', connectWallet);
+    document.getElementById('setButton').addEventListener('click', setMessage);
+    document.getElementById('getButton').addEventListener('click', getMessage);
+  </script>
+</body>
+</html>
+
